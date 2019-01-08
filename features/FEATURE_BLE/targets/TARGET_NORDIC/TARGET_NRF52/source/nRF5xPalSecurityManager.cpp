@@ -112,6 +112,22 @@ ble_error_t nRF5xSecurityManager::initialize()
         make_ArrayView(Y),
         make_ArrayView(secret)
     )) {
+        printf("costa    NORDIC PAL: initialized\r\n");
+        printf("costa    NORDIC PAL: X: ");
+        for (size_t i = 0; i < 32; ++i) {
+            printf("%02x", X[i]);
+        }
+        printf("\r\n");
+        printf("costa    NORDIC PAL: Y: ");
+        for (size_t i = 0; i < 32; ++i) {
+            printf("%02x", Y[i]);
+        }
+        printf("\r\n");
+        printf("costa    NORDIC PAL: secret: ");
+        for (size_t i = 0; i < 32; ++i) {
+            printf("%02x", secret[i]);
+        }
+        printf("\r\n");
         return BLE_ERROR_NONE;
     }
 
@@ -271,10 +287,13 @@ ble_error_t nRF5xSecurityManager::send_pairing_response(
     KeyDistribution initiator_dist,
     KeyDistribution responder_dist
 ) {
+    printf("costa NORDIC: --> send_pairing_response\r\n");
+    printf("                   oob_data_flag=%d\r\n", oob_data_flag);
     pairing_control_block_t* pairing_cb = allocate_pairing_cb(connection);
     if (!pairing_cb) {
         // not enough memory; try to reject the pairing request instead of
         // waiting for timeout.
+        printf("costa NORDIC: send_pairing_response: ERROR ENOMEM\r\n");
         cancel_pairing(connection, pairing_failure_t::UNSPECIFIED_REASON);
         return BLE_ERROR_NO_MEM;
     }
@@ -312,6 +331,7 @@ ble_error_t nRF5xSecurityManager::send_pairing_response(
         release_pairing_cb(pairing_cb);
     }
 
+    printf("costa NORDIC: <-- send_pairing_response: %lu\r\n", err);
     return convert_sd_error(err);
 }
 
@@ -655,6 +675,7 @@ ble_error_t nRF5xSecurityManager::passkey_request_reply(
 ble_error_t nRF5xSecurityManager::secure_connections_oob_request_reply(
     connection_handle_t connection,
     const oob_lesc_value_t &local_random,
+    const oob_confirm_t &local_confirm,
     const oob_lesc_value_t &peer_random,
     const oob_confirm_t &peer_confirm
 ) {
@@ -663,23 +684,49 @@ ble_error_t nRF5xSecurityManager::secure_connections_oob_request_reply(
         return BLE_ERROR_INVALID_STATE;
     }
 
+    printf("costa NORDIC: --> secure_connections_oob_request_reply\r\n");
+
     ble_gap_lesc_oob_data_t oob_own;
     ble_gap_lesc_oob_data_t oob_peer;
 
     // is own address important ?
     memcpy(oob_own.r, local_random.data(), local_random.size());
+    memcpy(oob_own.c, local_confirm.data(), local_confirm.size());
+    printf("costa NORDIC:     worked around FIXME: LOCAL CONFIRM\r\n");
     // FIXME: What to do with local confirm ???
 
     // is peer address important ?
     memcpy(oob_peer.r, peer_random.data(), peer_random.size());
     memcpy(oob_peer.c, peer_confirm.data(), peer_confirm.size());
 
+    printf("costa NORDIC: calling sd_ble_gap_lesc_oob_data_set\r\n");
+    printf("costa NORDIC oob_own.r: ");
+    for (size_t i = 0; i < 16; ++i) {
+        printf("%02x", oob_own.r[i]);
+    }
+    printf("\r\n");
+    printf("costa NORDIC oob_own.c: ");
+    for (size_t i = 0; i < 16; ++i) {
+        printf("%02x", oob_own.c[i]);
+    }
+    printf("\r\n");
+    printf("costa NORDIC oob_peer.r: ");
+    for (size_t i = 0; i < 16; ++i) {
+        printf("%02x", oob_peer.r[i]);
+    }
+    printf("\r\n");
+    printf("costa NORDIC oob_peer.c: ");
+    for (size_t i = 0; i < 16; ++i) {
+        printf("%02x", oob_peer.c[i]);
+    }
+    printf("\r\n");
     uint32_t err = sd_ble_gap_lesc_oob_data_set(
         connection,
         &oob_own,
         &oob_peer
     );
 
+    printf("costa NORDIC: <-- secure_connections_oob_request_reply: %lu\r\n", err);
     return convert_sd_error(err);
 }
 
@@ -726,6 +773,7 @@ ble_error_t nRF5xSecurityManager::send_keypress_notification(
 
 ble_error_t nRF5xSecurityManager::generate_secure_connections_oob()
 {
+    printf("costa NORDIC: --> generate_secure_connections_oob\r\n");
 #if defined(MBEDTLS_ECDH_C)
     ble_gap_lesc_p256_pk_t own_secret;
     ble_gap_lesc_oob_data_t oob_data;
@@ -734,11 +782,29 @@ ble_error_t nRF5xSecurityManager::generate_secure_connections_oob()
     memcpy(own_secret.pk, X.data(), X.size());
     memcpy(own_secret.pk + X.size(), Y.data(), Y.size());
 
+    printf("costa    NORDIC PAL: X: ");
+    for (size_t i = 0; i < X.size(); ++i) {
+        printf("%02x", X[i]);
+    }
+    printf("\r\n");
+    printf("costa    NORDIC PAL: Y: ");
+    for (size_t i = 0; i < Y.size(); ++i) {
+        printf("%02x", Y[i]);
+    }
+    printf("\r\n");
+    printf("costa    NORDIC PAL: secret: ");
+    for (size_t i = 0; i < secret.size(); ++i) {
+        printf("%02x", secret[i]);
+    }
+    printf("\r\n");
+
+    printf("costa NORDIC:     calling sd_ble_gap_lesc_oob_data_get\r\n");
     uint32_t err = sd_ble_gap_lesc_oob_data_get(
         BLE_CONN_HANDLE_INVALID,
         &own_secret,
         &oob_data
     );
+    printf("costa NORDIC:     returned from sd_ble_gap_lesc_oob_data_get: %lu\r\n", err);
 
     if (!err) {
         get_event_handler()->on_secure_connections_oob_generated(
@@ -747,8 +813,10 @@ ble_error_t nRF5xSecurityManager::generate_secure_connections_oob()
         );
     }
 
+    printf("costa NORDIC: <-- generate_secure_connections_oob: %lu\r\n", err);
     return convert_sd_error(err);
 #endif
+    printf("costa NORDIC: <-- generate_secure_connections_oob: ERROR NOT IMPLEMENTED\r\n");
     return BLE_ERROR_NOT_IMPLEMENTED;
 }
 
@@ -842,6 +910,7 @@ bool nRF5xSecurityManager::sm_handler(const ble_evt_t *evt)
                     );
                 }
             } else {
+                printf("costa NORDIC: calling handler->on_pairing_request\r\n");
                 handler->on_pairing_request(
                     connection,
                     params.oob,
@@ -926,6 +995,7 @@ bool nRF5xSecurityManager::sm_handler(const ble_evt_t *evt)
 
         case BLE_GAP_EVT_LESC_DHKEY_REQUEST: {
 #if defined(MBEDTLS_ECDH_C)
+            printf("costa NORDIC: --> BLE_GAP_EVT_LESC_DHKEY_REQUEST\r\n");
             const ble_gap_evt_lesc_dhkey_request_t& dhkey_request =
                 gap_evt.params.lesc_dhkey_request;
 
@@ -939,16 +1009,42 @@ bool nRF5xSecurityManager::sm_handler(const ble_evt_t *evt)
                 shared_secret.key
             );
 
+            //memcpy(shared_secret.key, X.data(), X.size());
+            printf("costa NORDIC DHKEY: peer_x:");
+            for (size_t i = 0; i < 32; ++i) {
+                printf("%02x", dhkey_request.p_pk_peer->pk[i]);
+            }
+            printf("\r\n");
+            printf("costa NORDIC DHKEY: peer_y:");
+            for (size_t i = 0; i < 32; ++i) {
+                printf("%02x", dhkey_request.p_pk_peer->pk[key_size + i]);
+            }
+            printf("\r\n");
+            printf("costa    NORDIC PAL: secret: ");
+            for (size_t i = 0; i < 32; ++i) {
+                printf("%02x", secret[i]);
+            }
+            printf("\r\n");
+            printf("costa    NORDIC PAL: shared_secret: ");
+            for (size_t i = 0; i < 32; ++i) {
+                printf("%02x", shared_secret.key[i]);
+            }
+            printf("\r\n");
             sd_ble_gap_lesc_dhkey_reply(connection, &shared_secret);
 
             if (dhkey_request.oobd_req) {
+                printf("                   dhkey_request.oobd_req=true\r\n");
                 handler->on_secure_connections_oob_request(connection);
+            } else {
+                printf("                   dhkey_request.oobd_req=false\r\n");
             }
+            printf("costa NORDIC: <-- BLE_GAP_EVT_LESC_DHKEY_REQUEST\r\n");
 #endif
             return true;
         }
 
         case BLE_GAP_EVT_AUTH_STATUS: {
+            printf("costa NORDIC: --> BLE_GAP_EVT_AUTH_STATUS\r\n");
             const ble_gap_evt_auth_status_t& status = gap_evt.params.auth_status;
 
             switch (status.auth_status) {
@@ -1071,6 +1167,7 @@ bool nRF5xSecurityManager::sm_handler(const ble_evt_t *evt)
                 case BLE_GAP_SEC_STATUS_NUM_COMP_FAILURE:
                 case BLE_GAP_SEC_STATUS_BR_EDR_IN_PROG:
                 case BLE_GAP_SEC_STATUS_X_TRANS_KEY_DISALLOWED:
+                    printf("costa NORDIC: reporting auth status failure");
                     self.release_pairing_cb(pairing_cb);
                     handler->on_pairing_error(
                         connection,
@@ -1083,10 +1180,12 @@ bool nRF5xSecurityManager::sm_handler(const ble_evt_t *evt)
                     break;
             }
 
+            printf("costa NORDIC: <-- BLE_GAP_EVT_AUTH_STATUS: true\r\n");
             return true;
         }
 
         case BLE_GAP_EVT_CONN_SEC_UPDATE: {
+            printf("costa NORDIC: --> BLE_GAP_EVT_CONN_SEC_UPDATE\r\n");
             const ble_gap_evt_conn_sec_update_t& req =
                 gap_evt.params.conn_sec_update;
 
@@ -1099,6 +1198,7 @@ bool nRF5xSecurityManager::sm_handler(const ble_evt_t *evt)
                     connection, link_encryption_t::NOT_ENCRYPTED
                 );
             }
+            printf("costa NORDIC: <-- BLE_GAP_EVT_CONN_SEC_UPDATE: true\r\n");
             return true;
         }
 
@@ -1115,11 +1215,13 @@ bool nRF5xSecurityManager::sm_handler(const ble_evt_t *evt)
         }
 
         case BLE_GAP_EVT_SEC_REQUEST: {
+            printf("costa NORDIC: --> BLE_GAP_EVT_CONN_SEC_REQUEST\r\n");
             const ble_gap_evt_sec_request_t& req = gap_evt.params.sec_request;
             handler->on_slave_security_request(
                 connection,
                 AuthenticationMask(req.bond, req.mitm, req.lesc, req.keypress)
             );
+            printf("costa NORDIC: <-- BLE_GAP_EVT_CONN_SEC_REQUEST: true\r\n");
             return true;
         }
 

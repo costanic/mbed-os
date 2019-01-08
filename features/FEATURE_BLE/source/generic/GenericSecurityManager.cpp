@@ -44,13 +44,17 @@ ble_error_t GenericSecurityManager::init(
 ) {
     ble_error_t result = _pal.initialize();
 
+    printf("costa: --> GenericSecurityManager::init");
+
     if (result != BLE_ERROR_NONE) {
+        printf("costa: <-- GenericSecurityManager::init: pal.initialize() ERROR %d\r\n", result);
     	return result;
     }
 
     result = init_database(db_path);
 
     if (result != BLE_ERROR_NONE) {
+        printf("costa: <-- GenericSecurityManager::init: init_database ERROR %d\r\n", result);
         return result;
     }
 
@@ -91,6 +95,7 @@ ble_error_t GenericSecurityManager::init(
         return result;
     }
 
+    printf("costa: <-- GenericSecurityManager::init: 0");
     return BLE_ERROR_NONE;
 }
 
@@ -217,17 +222,21 @@ ble_error_t GenericSecurityManager::acceptPairingRequest(connection_handle_t con
         return BLE_ERROR_INVALID_PARAM;
     }
 
+    printf("costa: --> GenericSecurityManager::acceptPairingRequest\r\n");
+
     update_oob_presence(connection);
 
     AuthenticationMask link_authentication(_default_authentication);
     if (cb->mitm_requested) {
         link_authentication.set_mitm(true);
     }
+    printf("           mitm_requested=%d\r\n", cb->mitm_requested);
 
     KeyDistribution initiator_distribution = cb->get_initiator_key_distribution();
 
     bool master_signing = initiator_distribution.get_signing();
 
+    printf("           master_sends_keys=%d\r\n", _master_sends_keys);
     if (_master_sends_keys) {
         initiator_distribution &= _default_key_distribution;
     } else {
@@ -238,6 +247,7 @@ ble_error_t GenericSecurityManager::acceptPairingRequest(connection_handle_t con
     }
 
     /* signing has to be offered and enabled on the link */
+    printf("           master_signing=%d\r\n", master_signing);
     if (master_signing) {
         initiator_distribution.set_signing(
             cb->signing_override_default ?
@@ -252,11 +262,16 @@ ble_error_t GenericSecurityManager::acceptPairingRequest(connection_handle_t con
 
     /* signing has to be requested and enabled on the link */
     if (responder_distribution.get_signing()) {
+        printf("           responder_signing=1\r\n");
+        printf("           responder_signing_override=%d\r\n", cb->signing_override_default);
+        printf("           responder_signing_requested=%d\r\n", cb->signing_requested);
         responder_distribution.set_signing(
             cb->signing_override_default ?
                 cb->signing_requested :
                 _default_key_distribution.get_signing()
         );
+    } else {
+        printf("           responder_signing=0\r\n");
     }
 
     return _pal.send_pairing_response(
@@ -636,6 +651,10 @@ ble_error_t GenericSecurityManager::generateOOB(
     const address_t *address
 ) {
     if (!_db) return BLE_ERROR_INITIALIZATION_INCOMPLETE;
+
+    printf("costa: --> GenericSecurityManager::generateOOB: address=%02x:%02x:%02x:%02x:%02x:%02x\r\n",
+           address->operator[](5), address->operator[](4), address->operator[](3),
+           address->operator[](2), address->operator[](1), address->operator[](0));
     /* legacy pairing */
     ble_error_t status = get_random_data(_oob_temporary_key.data(), 16);
 
@@ -647,6 +666,8 @@ ble_error_t GenericSecurityManager::generateOOB(
             &_oob_temporary_key
         );
     } else {
+        printf("costa: <-- GenericSecurityManager::generateOOB: ERROR1 %d\r\n",
+               status);
         return status;
     }
 
@@ -656,17 +677,30 @@ ble_error_t GenericSecurityManager::generateOOB(
         _oob_local_address = *address;
         /* this will be updated when calculation completes,
          * a value of all zeros is an invalid random value */
+        printf("costa:        setting _oob_local_random to all_zeros\r\n");
         set_all_zeros(_oob_local_random);
+        printf("costa:        setting _oob_local_confirm to all_zeros\r\n");
+        set_all_zeros(_oob_local_confirm);
 
         status = _pal.generate_secure_connections_oob();
         if (status == BLE_ERROR_NONE) {
+            printf("costa:        _oob_local_address=%02x:%02x:%02x:%02x:%02x:%02x\r\n",
+                   _oob_local_address[5], _oob_local_address[4], _oob_local_address[3],
+                   _oob_local_address[2], _oob_local_address[1], _oob_local_address[0]);
         } else if (status != BLE_ERROR_NOT_IMPLEMENTED) {
+            printf("costa: <-- GenericSecurityManager::generateOOB: ERROR2 %d\r\n",
+                   status);
             return status;
+        } else {
+            printf("costa:     G enericSecurityManager::generateOOB: ERROR3 %d\r\n",
+                   status);
         }
     } else {
+        printf("costa: <-- GenericSecurityManager::generateOOB: ERROR STACK_BUSY\r\n");
         return BLE_STACK_BUSY;
     }
 
+    printf("costa: <-- GenericSecurityManager::generateOOB: success\r\n");
     return BLE_ERROR_NONE;
 }
 
@@ -758,13 +792,16 @@ ble_error_t GenericSecurityManager::oobReceived(
     const oob_confirm_t *confirm
 ) {
     if (!_db) return BLE_ERROR_INITIALIZATION_INCOMPLETE;
+    printf("costa: --> GenericSecurityManager::oobReceived\r\n");
     if (address && random && confirm) {
         _oob_peer_address = *address;
         _oob_peer_random = *random;
         _oob_peer_confirm = *confirm;
+        printf("costa: <-- GenericSecurityManager::oobReceived: success\r\n");
         return BLE_ERROR_NONE;
     }
 
+    printf("costa: <-- GenericSecurityManager::oobReceived: ERROR\r\n");
     return BLE_ERROR_INVALID_PARAM;
 }
 
@@ -994,18 +1031,23 @@ void GenericSecurityManager::return_csrk_cb(
 
 void GenericSecurityManager::update_oob_presence(connection_handle_t connection) {
     MBED_ASSERT(_db);
+
+    printf("costa: --> GenericSecurityManager::update_oob_presence\r\n");
     ControlBlock_t *cb = get_control_block(connection);
     if (!cb) {
+        printf("costa: <-- GenericSecurityManager::update_oob_presence: ERROR: !cb\r\n");
         return;
     }
 
     SecurityDistributionFlags_t* flags = _db->get_distribution_flags(cb->db_entry);
     if (!flags) {
+        printf("costa: <-- GenericSecurityManager::update_oob_presence: ERROR: !flags\r\n");
         return;
     }
 
     /* if we support secure connection we only care about secure connections oob data */
     if (_default_authentication.get_secure_connections()) {
+        printf("           secure connections supported\r\n");
         cb->oob_present = (flags->peer_address == _oob_peer_address);
     } else {
         /* otherwise for legacy pairing we first set the oob based on set preference */
@@ -1017,6 +1059,8 @@ void GenericSecurityManager::update_oob_presence(connection_handle_t connection)
             cb->oob_present = true;
         }
     }
+    printf("costa: <-- GenericSecurityManager::update_oob_presence: oob_present=%d\r\n",
+           cb->oob_present);
 }
 
 void GenericSecurityManager::set_mitm_performed(connection_handle_t connection, bool enable) {
@@ -1141,6 +1185,9 @@ void GenericSecurityManager::on_pairing_request(
     KeyDistribution initiator_dist,
     KeyDistribution responder_dist
 ) {
+
+    printf("costa: --> GenericSecurityManager::on_pairing_request\r\n");
+    printf("           use_oob=%d\r\n", use_oob);
     /* cancel pairing if secure connection paring is not possible */
     if (!_legacy_pairing_allowed && !authentication.get_secure_connections()) {
         cancelPairingRequest(connection);
@@ -1381,25 +1428,46 @@ void GenericSecurityManager::on_confirmation_request(connection_handle_t connect
 }
 
 void GenericSecurityManager::on_secure_connections_oob_request(connection_handle_t connection) {
+
+    printf("costa: --> GenericSecurityManager::on_secure_connections_oob_request\r\n");
     set_mitm_performed(connection);
 
     ControlBlock_t *cb = get_control_block(connection);
     if (!cb) {
+        printf("costa: <-- GenericSecurityManager::on_secure_connections_oob_request: !cb\r\n");
         return;
     }
 
     SecurityDistributionFlags_t* flags = _db->get_distribution_flags(cb->db_entry);
     if (!flags) {
+        printf("costa: <-- GenericSecurityManager::on_secure_connections_oob_request: !flags\r\n");
         return;
     }
 
     if (flags->peer_address == _oob_peer_address) {
-        _pal.secure_connections_oob_request_reply(connection, _oob_local_random, _oob_peer_random, _oob_peer_confirm);
+        printf("costa:     peer_address == _oob_peer_address: calling on_secure_connections_oob_request_reply\r\n");
+        printf("costa NORDIC local_random: ");
+        for (size_t i = 0; i < 16; ++i) {
+            printf("%02x", _oob_local_random[i]);
+        }
+        printf("\r\n");
+        printf("costa NORDIC local_confirm: ");
+        for (size_t i = 0; i < 16; ++i) {
+            printf("%02x", _oob_local_confirm[i]);
+        }
+        printf("\r\n");
+        _pal.secure_connections_oob_request_reply(connection,
+                                                  _oob_local_random,
+                                                  _oob_local_confirm,
+                                                  _oob_peer_random,
+                                                  _oob_peer_confirm);
         /* do not re-use peer OOB */
         set_all_zeros(_oob_peer_address);
     } else {
+        printf("costa:     peer_address != _oob_peer_address: CANCEL PAIRING\r\n");
         _pal.cancel_pairing(connection, pairing_failure_t::OOB_NOT_AVAILABLE);
     }
+    printf("costa: <-- GenericSecurityManager::on_secure_connections_oob_request\r\n");
 }
 
 void GenericSecurityManager::on_legacy_pairing_oob_request(connection_handle_t connection) {
@@ -1437,8 +1505,11 @@ void GenericSecurityManager::on_secure_connections_oob_generated(
     const oob_lesc_value_t &random,
     const oob_confirm_t &confirm
 ) {
+    printf("costa: --> on_secure_connections_oob_generated\r\n");
     eventHandler->oobGenerated(&_oob_local_address, &random, &confirm);
     _oob_local_random = random;
+    _oob_local_confirm = confirm;
+    printf("costa: <-- on_secure_connections_oob_generated\r\n");
 }
 
 ////////////////////////////////////////////////////////////////////////////
