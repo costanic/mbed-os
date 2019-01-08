@@ -1932,12 +1932,14 @@ int mbedtls_ecp_gen_keypair_base( mbedtls_ecp_group *grp,
     int ret;
     size_t n_size = ( grp->nbits + 7 ) / 8;
 
+    printf("costa: --> mbedtls_ecp_gen_keypair_base\r\n");
 #if defined(ECP_MONTGOMERY)
     if( ecp_get_type( grp ) == ECP_TYPE_MONTGOMERY )
     {
         /* [M225] page 5 */
         size_t b;
 
+        printf("costa:     using MONTGOMERY\r\n");
         do {
             MBEDTLS_MPI_CHK( mbedtls_mpi_fill_random( d, n_size, f_rng, p_rng ) );
         } while( mbedtls_mpi_bitlen( d ) == 0);
@@ -1963,6 +1965,7 @@ int mbedtls_ecp_gen_keypair_base( mbedtls_ecp_group *grp,
 #if defined(ECP_SHORTWEIERSTRASS)
     if( ecp_get_type( grp ) == ECP_TYPE_SHORT_WEIERSTRASS )
     {
+        printf("costa:     using SHORTWEIERSTRASS\r\n");
         /* SEC1 3.2.1: Generate d such that 1 <= n < N */
         int count = 0;
 
@@ -1998,9 +2001,12 @@ int mbedtls_ecp_gen_keypair_base( mbedtls_ecp_group *grp,
         return( MBEDTLS_ERR_ECP_BAD_INPUT_DATA );
 
 cleanup:
-    if( ret != 0 )
+    if( ret != 0 ) {
+        printf("costa: <-- mbedtls_ecp_gen_keypair_base: ERROR: %d\r\n", ret);
         return( ret );
+    }
 
+    printf("costa: <-- mbedtls_ecp_gen_keypair_base\r\n");
     return( mbedtls_ecp_mul( grp, Q, d, G, f_rng, p_rng ) );
 }
 

@@ -253,7 +253,10 @@ public:
         /* We create a fake value for oob to allow creation of the next oob which needs
          * the last process to finish first before restarting (this is to simplify checking).
          * This fake value will not be used as the oob address is currently invalid */
+        printf("costa: --> GenericSecurityMangager constructor");
         _oob_local_random[0] = 1;
+        _oob_local_confirm[0] = 1;
+        printf("costa: <-- GenericSecurityMangager constructor: 0");
     }
 
     ~GenericSecurityManager() {
@@ -502,6 +505,7 @@ private:
     oob_lesc_value_t _oob_peer_random;
     oob_confirm_t _oob_peer_confirm;
     oob_lesc_value_t _oob_local_random;
+    oob_lesc_value_t _oob_local_confirm;
     address_t _oob_temporary_key_creator_address; /**< device which generated and sent the TK */
     oob_tk_t _oob_temporary_key; /**< used for legacy pairing */
 

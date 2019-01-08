@@ -104,6 +104,24 @@ bool CryptoToolbox::generate_shared_secret(
     mbedtls_mpi secret_key;
     mbedtls_ecp_point public_keys;
 
+    printf("costa: --> generate_shared_secret\r\n");
+
+    printf("costa:    Peer X : ");
+    for (size_t i = 0; i < lesc_key_size_; ++i) {
+        printf("%02x", peer_X[i]);
+    }
+    printf("\r\n");
+    printf("costa:    Peer Y : ");
+    for (size_t i = 0; i < lesc_key_size_; ++i) {
+        printf("%02x", peer_Y[i]);
+    }
+    printf("\r\n");
+    printf("costa:    Private: ");
+    for (size_t i = 0; i < lesc_key_size_; ++i) {
+        printf("%02x", own_secret[i]);
+    }
+    printf("\r\n");
+
     mbedtls_mpi_init(&result);
     mbedtls_mpi_init(&secret_key);
     mbedtls_ecp_point_init(&public_keys);
@@ -130,6 +148,7 @@ bool CryptoToolbox::generate_shared_secret(
     mbedtls_mpi_free(&secret_key);
     mbedtls_mpi_free(&result);
 
+    printf("costa: <-- generate_shared_secret: %d\r\n", err);
     return err ? false : true;
 }
 
